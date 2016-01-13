@@ -11,11 +11,17 @@ A proof-of-concept working script automating the long known Facebook Contact Syn
 
 banner="Facebook Contacts Sync Enabler";
 apklist="ContactsProvider.apk";
+apkbak=/data/media/APK-Backup;
+backup=1;
 cleanup=1;
 
 banner is the name of your patch zip, usually suggestive of what it does, to be displayed at the beginning of the zip flash. You should include your name/handle here like "by osm0sis @ xda-developers" for credit purposes.
 
 apklist is a string containing the list of APKs to be patched included in the patch zip, separated by spaces between the quotes. Each APK is automatically found recursively in /system, then copied to the working directory to be decompiled and acted on, then copied back to /system.
+
+apkbak is the location to place backups of the untouched APKs in apklist if backup=1 is set.
+
+backup=1 will store backups of the untouched APKs in the location specified in apkbak.
 
 cleanup=0 will keep the zip from removing it's working directory in /tmp/apkpatcher or any of the files resulting from the smali process - this can be useful if trying to debug in adb shell whether the patches worked correctly. cleanup=1 is necessary on multi-APK patching zips to clean the baksmali classout directory for the next APK, so it's recommended each APK to be patched be tested on their own with cleanup=0 before combining into a single zip.
 
