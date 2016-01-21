@@ -11,14 +11,20 @@ set_progress() { echo "set_progress $1" > $OUTFD; }
 abort() { ui_print " "; ui_print "$*"; exit 1; }
 
 baksmali() {
-  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar -classpath $baksmali org.jf.baksmali.main -x $1 -o classout;
+  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/apache-xml.jar -classpath $baksmali org.jf.baksmali.main -o classout $1;
   test $? != 0 && abort "Decompiling APK classes failed. Aborting...";
 }
 smali() {
-  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar -classpath $smali org.jf.smali.main classout -o classes.dex;
+  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/apache-xml.jar -classpath $smali org.jf.smali.main -o classes.dex classout;
   test $? != 0 && abort "Rebuilding APK classes failed. Aborting...";
-  $bin/zip -v $1 classes.dex;
-  test $? != 0 && abort "Updating APK classes failed. Aborting...";
+}
+apktool_d() {
+  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/apache-xml.jar -classpath $apktool brut.apktool.Main d --frame-path $ap/framework --no-src -o resout $1;
+  test $? != 0 && abort "Decoding APK resources failed. Aborting...";
+}
+apktool_b() {
+  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/apache-xml.jar -classpath $apktool brut.apktool.Main b --frame-path $ap/framework --aapt $aapt --copy-original -o $1 resout;
+  test $? != 0 && abort "Rebuilding APK resources failed. Aborting...";
 }
 
 # working directory variables
@@ -29,18 +35,19 @@ script=$ap/script;
 
 show_progress 1.34 0;
 mkdir -p $ap;
-cd $ap;
-unzip -o "$ZIP";
+unzip -o "$ZIP" -d $ap;
 if [ $? != 0 -o -z "$(ls $ap)" ]; then
   abort "Unzip failed. Aborting...";
 fi;
 
 # set up extracted files and directories
-chmod -R 755 $bin $script *.sh;
+chmod -R 755 $bin $script $ap/*.sh;
 
-# dexed bak/smali jars (via: dx --dex --output=classes.dex <file>.jar)
+# dexed bak/smali and apktool jars (via: dx --dex --output=classes.dex <file>.jar)
 baksmali=$bin/baksmali-*-dexed.jar;
 smali=$bin/smali-*-dexed.jar;
+apktool=$bin/apktool_*-dexed.jar;
+aapt=$bin/aapt*;
 
 # import variables
 . $ap/envvar.sh;
@@ -56,8 +63,9 @@ set_progress 0.1;
 progress=10;
 
 ui_print "Patching...";
-
+cd $ap;
 amount=$((100 / `echo $apklist | wc -w`));
+subamt=$(awk -v num=$amount 'BEGIN { print num / 10}');
 for target in $apklist; do
   ui_print "$target";
   apkname=$(basename $target .apk);
@@ -65,41 +73,68 @@ for target in $apklist; do
   # copy in target system file to patch
   sysfile=`find /system -mindepth 2 -name $target`;
   cp -fp $sysfile $ap;
+  progress=$((progress + subamt));
+  set_progress $(awk -v num=$progress 'BEGIN { print num / 100}');
 
   # make a backup if set
   if [ "$backup" == 1 ]; then
     mkdir -p $apkbak;
     cp -fp $sysfile $apkbak;
   fi;
+  progress=$((progress + subamt));
+  set_progress $(awk -v num=$progress 'BEGIN { print num / 100}');
 
   # smali file patches
-  if [ -f $script/$apkname.sh ]; then
+  if [ -f $script/$apkname-smali.sh -o -d $patch/$apkname-smali ]; then
     baksmali $target;
-    . $script/$apkname.sh;
-    smali $target;
+    if [ -f $script/$apkname-smali.sh ]; then
+      . $script/$apkname-smali.sh;
+    fi;
+    if [ -d $patch/$apkname-smali ]; then
+      cp -rf $patch/$apkname-smali/* classout/;
+    fi;
+    smali;
   fi;
+  # don't directly add to zip if there are apktool resource patches to perform
+  if [ ! -f $script/$apkname-res.sh -o ! -d $patch/$apkname-res ]; then
+    $bin/zip -v $target classes.dex;
+    test $? != 0 && abort "Updating APK classes failed. Aborting...";
+  fi;
+  progress=$((progress + 3 * subamt));
+  set_progress $(awk -v num=$progress 'BEGIN { print num / 100}');
 
-  # apk zip file patches
-  if [ -d $patch/$apkname ]; then
-    cd $patch/$apkname;
-    for j in $(find -type f | cut -c 3-); do
-      $bin/zip -v $ap/$target $j;
-    done;
-    cd $ap;
+  # resource file patches
+  if [ -f $script/$apkname-res.sh -o -d $patch/$apkname-res ]; then
+    apktool_d $target;
+    if [ -f $script/$apkname-res.sh ]; then
+      . $script/$apkname-res.sh;
+    fi;
+    if [ -d $patch/$apkname-res ]; then
+      cp -rf $patch/$apkname-res/* resout/;
+    fi;
+    # add the new classes.dex from smali if it exists
+    if [ -f $ap/classes.dex ]; then
+      cp -f classes.dex resout/classes.dex;
+    fi;
+    apktool_b $target;
   fi;
+  progress=$((progress + 3 * subamt));
+  set_progress $(awk -v num=$progress 'BEGIN { print num / 100}');
 
   # zipalign updated file
   cp -f $target $apkname-preopt.apk;
-  $bin/zipalign -fv 4 $apkname-preopt.apk $target;
+  $bin/zipalign -v 4 $apkname-preopt.apk $target;
 
   # copy patched file back to system
   cp -fp $ap/$target $sysfile;
+  progress=$((progress + subamt));
+  set_progress $(awk -v num=$progress 'BEGIN { print num / 100}');
 
   # remove temp files if cleanup is set
   if [ "$cleanup" == 1 ]; then
-    rm -rf classout classes.dex $target $apkname-preopt.apk;
+    rm -rf classout classes.dex resout $target $apkname-preopt.apk;
   fi;
-  progress=$((progress + amount));
+  progress=$((progress + subamt));
   set_progress $(awk -v num=$progress 'BEGIN { print num / 100}');
 done;
 ui_print " ";

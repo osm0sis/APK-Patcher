@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="unrestricted_packages">
+        <item>com.facebook.katana</item>
+    </string-array>
+</resources>

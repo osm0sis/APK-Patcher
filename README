@@ -1,9 +1,9 @@
 APK-Patcher - Flashable Zip Template for Modifying System APKs On-Device
 by osm0sis @ xda-developers
 
-APK modification can be a tedious task. If you want to provide modified APKs you copy it to PC to decompile using the Java applet baksmali, make changes and recompile using another Java applet, smali. Then there's the pitfall of different recompiled APKs being required for the various different ROMs, etc., not to mention across Android versions. So, considering Android runs a version of Java runtime and the primary tools are Java-based I wondered why we couldn't do all of this on-device and on-the-fly so modifications could be applied via recovery, to whatever ROM APK was present, and take the constant update burden off of the modifcation creator.
+APK modification can be a tedious task. If you want to provide modified APKs you copy it to PC to decompile using Java applets like baksmali and apktool, make changes and recompile using another Java applet, smali (or apktool again). Then there's the pitfall of different recompiled APKs being required for the various different ROMs, etc., not to mention across Android versions. So, considering Android runs a version of Java runtime and the primary tools are Java-based I wondered why we couldn't do all of this on-device and on-the-fly so modifications could be applied via recovery, to whatever ROM APK was present, and take the constant update burden off of the modifcation creator.
 
-I have taken baksmali and smali, dexed them to allow them to run on-device, and found static ARM compiles of zip and zipalign to run on the various Android versions and devices. These binaries would need to be recompiled for other architecture support. The zip is smart and automated, using the APK name to run all the various parts involved for complicated patches and is extensible to any number of APKs in a single zip. The modifcation creator needs to only add the APK name(s) to a list, figure out how to make the changes universally (i.e. sed, awk, etc.) then add the commands to a script of the same name, and add any other changes to the zip itself in a subdirectory of the same name.
+I have taken these commandline Java applets, dexed them to allow them to run on-device, and found static ARM compiles of zip and zipalign (and PIE compile of aapt, for now) to run on the various Android versions and devices. These binaries would need to be recompiled for other architecture support. The zip is smart and automated, using the APK name to run all the various parts involved for complicated patches and is extensible to any number of APKs in a single zip. The modifcation creator needs to only add the APK name(s) to a list, figure out how to make the changes universally (i.e. sed, awk, etc.) then add the commands to scripts of the same name, and add any whole-file changes in a subdirectory of the same name.
 
 A proof-of-concept working script automating the long known Facebook Contact Sync modifications to ContactProvder.apk is included for reference.
 
@@ -27,8 +27,10 @@ cleanup=0 will keep the zip from removing it's working directory in /tmp/apkpatc
 
 // Instructions
 
-1- Place any required script to alter the decompiled APK classes.dex smali files in /script as a .sh file with the name of the APK
-2- Place any required/additional updated APK zip files (files in the general structure of the APK when viewed as a zip) in /patch under the name of the APK and the relative path within the zip
+1a- Place any required script to alter the decompiled APK classes.dex smali files in /script as a -smali.sh file with the name of the APK
+1b- Place any required/additional updated whole smali files in /patch under the name of the APK with "-smali" and the relative path within the classes.dex file (including com)
+2a- Place any required script to alter the decoded APK resources.asrc files in /script as a -res.sh file with the name of the APK
+2b- Place any required/additional updated whole resource files in /patch under the name of the APK with "-res" and the relative path within the zip (including res)
 3- Modify the envvar.sh to add your banner, apklist and cleanup options
 4- Modify the extracmd.sh to add any additional commands to be performed at the end of the patching process that aren't patch-related (/data file changes, etc.)
 5- zip -r9 UPDATE-APK-Patcher.zip * -x README UPDATE-APK-Patcher.zip
