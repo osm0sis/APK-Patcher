@@ -23,7 +23,7 @@ apktool_d() {
   test $? != 0 && abort "Decoding APK resources failed. Aborting...";
 }
 apktool_b() {
-  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/apache-xml.jar -classpath $apktool brut.apktool.Main b --frame-path $ap/framework --aapt $aapt --copy-original -o $1 resout;
+  ANDROID_DATA=$ap ANDROID_ROOT=/system LD_LIBRARY_PATH=/system/lib dalvikvm -Xbootclasspath:/system/framework/core.jar:/system/framework/conscrypt.jar:/system/framework/apache-xml.jar -classpath $apktool brut.apktool.Main b --frame-path $ap/framework --aapt $bin/aapt --copy-original -o $1 resout;
   test $? != 0 && abort "Rebuilding APK resources failed. Aborting...";
 }
 
@@ -47,7 +47,6 @@ chmod -R 755 $bin $script $ap/*.sh;
 baksmali=$bin/baksmali-*-dexed.jar;
 smali=$bin/smali-*-dexed.jar;
 apktool=$bin/apktool_*-dexed.jar;
-aapt=$bin/aapt*;
 
 # import variables
 . $ap/envvar.sh;
@@ -57,8 +56,8 @@ ui_print "$banner";
 ui_print " ";
 ui_print "APK-Patcher by osm0sis @ xda-developers";
 ui_print " ";
-/sbin/busybox mount /system;
-/sbin/busybox mount /data;
+mount /system;
+mount /data;
 set_progress 0.1;
 progress=10;
 
@@ -123,7 +122,7 @@ for target in $apklist; do
 
   # zipalign updated file
   cp -f $target $apkname-preopt.apk;
-  $bin/zipalign -v 4 $apkname-preopt.apk $target;
+  $bin/zipalign -p 4 $apkname-preopt.apk $target;
 
   # copy patched file back to system
   cp -fp $ap/$target $sysfile;
